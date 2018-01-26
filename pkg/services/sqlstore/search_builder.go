@@ -101,6 +101,7 @@ func (sb *SearchBuilder) buildSelect() {
 	sb.sql.WriteString(
 		`SELECT
 			dashboard.id,
+			dashboard.guid,
 			dashboard.title,
 			dashboard.slug,
 			dashboard_tag.term,

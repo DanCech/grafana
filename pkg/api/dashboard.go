@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"regexp"
 
 	"github.com/grafana/grafana/pkg/services/dashboards"
 
@@ -76,6 +77,7 @@ func GetDashboard(c *middleware.Context) Response {
 	meta := dtos.DashboardMeta{
 		IsStarred:   isStarred,
 		Slug:        dash.Slug,
+		Guid:        dash.Guid,
 		Type:        m.DashTypeDB,
 		CanStar:     c.IsSignedIn,
 		CanSave:     canSave,
@@ -125,6 +127,25 @@ func getUserLogin(userId int64) string {
 }
 
 func getDashboardHelper(orgId int64, slug string, id int64) (*m.Dashboard, Response) {
+	// if the specified slug looks like it contains a guid
+	slugRegexp := regexp.MustCompile(fmt.Sprint("^g[[:alnum:]]{", m.DashboardGuidLen-1, "}(-|$)"))
+	if slugRegexp.MatchString(slug) {
+		// try to load the dashboard by guid
+		query := m.GetDashboardQuery{Guid: slug[:m.DashboardGuidLen], Id: id, OrgId: orgId}
+		if err := bus.Dispatch(&query); err == nil {
+			return query.Result, nil
+		}
+
+		// try to load the dashboard by the remainder of the slug
+		if len(slug) > m.DashboardGuidLen+1 {
+			query := m.GetDashboardQuery{Slug: slug[m.DashboardGuidLen+1:], Id: id, OrgId: orgId}
+			if err := bus.Dispatch(&query); err == nil {
+				return query.Result, nil
+			}
+		}
+	}
+
+	// fall back to raw slug
 	query := m.GetDashboardQuery{Slug: slug, Id: id, OrgId: orgId}
 	if err := bus.Dispatch(&query); err != nil {
 		return nil, ApiError(404, "Dashboard not found", err)
@@ -226,7 +247,7 @@ func PostDashboard(c *middleware.Context, cmd m.SaveDashboardCommand) Response {
 	}
 
 	c.TimeRequest(metrics.M_Api_Dashboard_Save)
-	return Json(200, util.DynMap{"status": "success", "slug": dashboard.Slug, "version": dashboard.Version, "id": dashboard.Id})
+	return Json(200, util.DynMap{"status": "success", "slug": dashboard.Slug, "guid": dashboard.Guid, "version": dashboard.Version, "id": dashboard.Id})
 }
 
 func GetHomeDashboard(c *middleware.Context) Response {

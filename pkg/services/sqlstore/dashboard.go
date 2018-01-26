@@ -25,7 +25,7 @@ func SaveDashboard(cmd *m.SaveDashboardCommand) error {
 		dash := cmd.GetDashboardModel()
 
 		// try get existing dashboard
-		var existing, sameTitle m.Dashboard
+		var existing, sameGuid m.Dashboard
 
 		if dash.Id > 0 {
 			dashWithIdExists, err := sess.Where("id=? AND org_id=?", dash.Id, dash.OrgId).Get(&existing)
@@ -51,19 +51,23 @@ func SaveDashboard(cmd *m.SaveDashboardCommand) error {
 			}
 		}
 
-		sameTitleExists, err := sess.Where("org_id=? AND slug=?", dash.OrgId, dash.Slug).Get(&sameTitle)
+		sameGuidExists, err := sess.Where("org_id=? AND guid=?", dash.OrgId, dash.Guid).Get(&sameGuid)
 		if err != nil {
 			return err
 		}
 
-		if sameTitleExists {
-			// another dashboard with same name
-			if dash.Id != sameTitle.Id {
-				if cmd.Overwrite {
-					dash.Id = sameTitle.Id
-					dash.Version = sameTitle.Version
-				} else {
-					return m.ErrDashboardWithSameNameExists
+		// another dashboard with same guid
+		if sameGuidExists && dash.Id != sameGuid.Id {
+			if cmd.Overwrite {
+				dash.Id = sameGuid.Id
+				dash.Version = sameGuid.Version
+			} else {
+				for sameGuidExists {
+					dash.Guid = m.DashboardGuid()
+					sameGuidExists, err = sess.Where("org_id=? AND guid=?", dash.OrgId, dash.Guid).Get(&sameGuid)
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -165,7 +169,7 @@ func setHasAcl(sess *DBSession, dash *m.Dashboard) error {
 }
 
 func GetDashboard(query *m.GetDashboardQuery) error {
-	dashboard := m.Dashboard{Slug: query.Slug, OrgId: query.OrgId, Id: query.Id}
+	dashboard := m.Dashboard{Slug: query.Slug, OrgId: query.OrgId, Id: query.Id, Guid: query.Guid}
 	has, err := x.Get(&dashboard)
 
 	if err != nil {
@@ -175,12 +179,14 @@ func GetDashboard(query *m.GetDashboardQuery) error {
 	}
 
 	dashboard.Data.Set("id", dashboard.Id)
+	dashboard.Data.Set("guid", dashboard.Guid)
 	query.Result = &dashboard
 	return nil
 }
 
 type DashboardSearchProjection struct {
 	Id          int64
+	Guid        string
 	Title       string
 	Slug        string
 	Term        string
@@ -259,7 +265,7 @@ func makeQueryResult(query *search.FindPersistedDashboardsQuery, res []Dashboard
 			hit = &search.Hit{
 				Id:          item.Id,
 				Title:       item.Title,
-				Uri:         "db/" + item.Slug,
+				Uri:         "db/" + item.Guid + "-" + item.Slug,
 				Slug:        item.Slug,
 				Type:        getHitType(item),
 				FolderId:    item.FolderId,

@@ -16,6 +16,7 @@ type DashboardMeta struct {
 	CanAdmin    bool      `json:"canAdmin"`
 	CanStar     bool      `json:"canStar"`
 	Slug        string    `json:"slug"`
+	Guid        string    `json:"guid"`
 	Expires     time.Time `json:"expires"`
 	Created     time.Time `json:"created"`
 	Updated     time.Time `json:"updated"`

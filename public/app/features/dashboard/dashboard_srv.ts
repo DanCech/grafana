@@ -72,8 +72,9 @@ export class DashboardSrv {
 
   postSave(clone, data) {
     this.dash.version = data.version;
+    this.dash.guid = data.guid;
 
-    var dashboardUrl = '/dashboard/db/' + data.slug;
+    var dashboardUrl = '/dashboard/db/' + data.guid + '-' + data.slug;
     if (dashboardUrl !== this.$location.path()) {
       this.$location.url(dashboardUrl);
     }

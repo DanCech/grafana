@@ -150,4 +150,18 @@ func addDashboardMigration(mg *Migrator) {
 	mg.AddMigration("Add column has_acl in dashboard", NewAddColumnMigration(dashboardV2, &Column{
 		Name: "has_acl", Type: DB_Bool, Nullable: false, Default: "0",
 	}))
+
+	// new guid column
+	mg.AddMigration("Add column guid in dashboard", NewAddColumnMigration(dashboardV2, &Column{
+		Name: "guid", Type: DB_NVarchar, Length: 10, Nullable: true,
+	}))
+
+	mg.AddMigration("Set guid column values", new(RawSqlMigration).
+		Sqlite("UPDATE dashboard SET guid=printf('g%07d',id) WHERE guid IS NULL;").
+		Postgres("UPDATE dashboard SET guid=concat('g',lpad('' || id,7,'0')) WHERE guid IS NULL;").
+		Mysql("UPDATE dashboard SET guid=concat('g',lpad(id,7,'0')) WHERE guid IS NULL;"))
+
+	mg.AddMigration("Add index for guid in dashboard", NewAddIndexMigration(dashboardV2, &Index{
+		Cols: []string{"guid"}, Type: UniqueIndex,
+	}))
 }

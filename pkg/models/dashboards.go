@@ -2,6 +2,7 @@ package models
 
 import (
 	"errors"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ var (
 	ErrDashboardNotFound                 = errors.New("Dashboard not found")
 	ErrDashboardSnapshotNotFound         = errors.New("Dashboard snapshot not found")
 	ErrDashboardWithSameNameExists       = errors.New("A dashboard with the same name already exists")
+	ErrDashboardWithSameGuidExists       = errors.New("A dashboard with the same guid already exists")
 	ErrDashboardVersionMismatch          = errors.New("The dashboard has been changed by someone else")
 	ErrDashboardTitleEmpty               = errors.New("Dashboard title cannot be empty")
 	ErrDashboardFolderCannotHaveParent   = errors.New("A Dashboard Folder cannot be added to another folder")
@@ -39,6 +41,7 @@ var (
 // Dashboard model
 type Dashboard struct {
 	Id       int64
+	Guid     string
 	Slug     string
 	OrgId    int64
 	GnetId   int64
@@ -61,6 +64,7 @@ type Dashboard struct {
 // NewDashboard creates a new dashboard
 func NewDashboard(title string) *Dashboard {
 	dash := &Dashboard{}
+	dash.Guid = DashboardGuid()
 	dash.Data = simplejson.New()
 	dash.Data.Set("title", title)
 	dash.Title = title
@@ -107,6 +111,12 @@ func NewDashboardFromJson(data *simplejson.Json) *Dashboard {
 		dash.GnetId = int64(gnetId)
 	}
 
+	if guid, err := dash.Data.Get("guid").String(); err == nil {
+		dash.Guid = guid
+	} else {
+		dash.Guid = DashboardGuid()
+	}
+
 	return dash
 }
 
@@ -147,6 +157,32 @@ func SlugifyTitle(title string) string {
 	return slug.Make(strings.ToLower(title))
 }
 
+const DashboardGuidChars = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+const DashboardGuidLen = 8
+const (
+	letterIdxBits = 6                    // 6 bits to represent a letter index
+	letterIdxMask = 1<<letterIdxBits - 1 // All 1-bits, as many as letterIdxBits
+	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
+)
+
+func DashboardGuid() string {
+	b := make([]byte, DashboardGuidLen)
+	b[0] = "g"[0]
+	// A rand.Int63() generates 63 random bits, enough for letterIdxMax letters!
+	for i, cache, remain := DashboardGuidLen-1, rand.Int63(), letterIdxMax; i >= 1; {
+		if remain == 0 {
+			cache, remain = rand.Int63(), letterIdxMax
+		}
+		if idx := int(cache & letterIdxMask); idx < len(DashboardGuidChars) {
+			b[i] = DashboardGuidChars[idx]
+			i--
+		}
+		cache >>= letterIdxBits
+		remain--
+	}
+	return string(b)
+}
+
 //
 // COMMANDS
 //
@@ -177,8 +213,9 @@ type DeleteDashboardCommand struct {
 //
 
 type GetDashboardQuery struct {
-	Slug  string // required if no Id is specified
-	Id    int64  // optional if slug is set
+	Slug  string // optional if Id or Guid is specified
+	Id    int64  // optional if Slug or Guid is specified
+	Guid  string // optional if Id or Slug is specified
 	OrgId int64
 
 	Result *Dashboard
